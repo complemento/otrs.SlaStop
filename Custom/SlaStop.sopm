@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <otrs_package version="1.1">
     <Name>SlaStop</Name>
-    <Version>5.0.5</Version>
+    <Version>5.0.6</Version>
     <Vendor>Complemento [Free]</Vendor>
     <URL>http://www.complemento.net.br</URL>
     <License>GNU GENERAL PUBLIC LICENSE Version 2, June 1991</License>
+    <ChangeLog Date="2017-05-05 12:17:00" Version="5.0.6">Cancel SLA working time on solution escalation when ticket is paused, improving the performance of the system</ChangeLog>
     <ChangeLog Date="2015-06-10 12:17:00" Version="4.0.1">Migrated to OTRS version 4</ChangeLog>
     <ChangeLog Date="2013-12-19 15:38:00" Version="3.3.1">Define which close time should be used on stats, the first or the last</ChangeLog>
     <ChangeLog Date="2013-12-19 13:38:00" Version="3.2">Fixed bugs javascript</ChangeLog>

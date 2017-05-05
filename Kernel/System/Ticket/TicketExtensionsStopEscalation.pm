@@ -24,8 +24,6 @@ Calculate non relevant time for escalation.
 sub GetTotalNonEscalationRelevantBusinessTime {
     my ( $Self, %Param ) = @_;
 
-#    $Kernel::OM->Get('Kernel::System::Time') ||= Kernel::System::State->new( %{$Self} );
-
     return if !$Param{TicketID};
 
     # get optional parameter
@@ -42,9 +40,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         );
     }
 
-## Esta vindo TicketID , mas não esta vindo nem starttime, stoptime e timesstamps acima, nem Type
-##
-    #---------------------------------------------------------------------------
     # get some config values if required...
     if ( !$Param{RelevantStates} ) {
         my $RelevantStateNamesArrRef =
@@ -65,10 +60,8 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         %RelevantStates = %{ $Param{RelevantStates} };
     }
 
-
-
     #---------------------------------------------------------------------------
-    # get esclation data...
+    # get escalation data...
     my %Ticket = $Self->TicketGet(
         TicketID => $Param{TicketID},
         UserID   => 1,
@@ -171,7 +164,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 {
     no warnings 'redefine';
 
-    # 
     # overwrite sub _TicketGetFirstResponse to get correct time and not only for escalated tickets
     sub Kernel::System::Ticket::_TicketGetFirstResponse {
         my ( $Self, %Param ) = @_;
@@ -199,10 +191,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         my $SQL2 = ') ORDER BY a.create_time';
 
         my $RespTimeByPhone = $Kernel::OM->Get('Kernel::Config')->Get('Ticket::ResponsetimeSetByPhoneTicket');
-#        my @RespTimeByPhoneTicketTypes = @{
-#            $Kernel::OM->Get('Kernel::Config')
-#                ->Get('Ticket::ResponsetimeSetByPhoneTicket::OnlyForTheseTicketTypes')
-#            };
         my @RespTimeByPhoneTicketTypes;
         my $RespTimeByPhoneTicketTypeStrg = join( ",", @RespTimeByPhoneTicketTypes );
         if (
@@ -217,10 +205,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         }
 
         my $RespTimeByAutoReply = $Kernel::OM->Get('Kernel::Config')->Get('Ticket::ResponsetimeSetByAutoReply');
-#        my @RespTimeByAutoReplyTypes = @{
-#            $Kernel::OM->Get('Kernel::Config')
-#                ->Get('Ticket::ResponsetimeSetByAutoReply::OnlyForTheseTicketTypes')
-#            };
         my @RespTimeByAutoReplyTypes;
         my $RespTimeByAutoReplyTypeStrg = join( ",", @RespTimeByAutoReplyTypes );
         if (
@@ -240,18 +224,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 
         # check if first response is already done
         return if !$Kernel::OM->Get('Kernel::System::DB')->Prepare(
-
-# 
-#SQL =>
-#    'SELECT a.create_time,a.id FROM article a, article_sender_type ast, article_type art'
-#    . ' WHERE a.article_sender_type_id = ast.id AND a.article_type_id = art.id AND'
-#    . ' a.ticket_id = ? AND ast.name = \'agent\' AND'
-#    . ' (art.name LIKE \'email-ext%\' OR art.name LIKE \'note-ext%\' OR art.name = \'phone\' OR art.name = \'fax\' OR art.name = \'sms\')'
-#    . ' ORDER BY a.create_time',
             SQL => $SQL,
-
-            # 
-
             Bind  => [ \$Param{TicketID} ],
             Limit => 1,
         );
@@ -337,15 +310,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             push @HistoryTypeIDs , $HistoryTypeID;
         }
         return if scalar(@HistoryTypeIDs) == 0;
-                
-        # see for OTRS-Bug 5531
-        #return if !$Kernel::OM->Get('Kernel::System::DB')->Prepare(
-        #    SQL => "SELECT create_time FROM ticket_history WHERE ticket_id = ? AND "
-        #        . " state_id IN (${\(join ', ', sort @List)}) AND history_type_id = ? "
-        #        . " ORDER BY create_time DESC",
-        #    Bind => [ \$Param{TicketID}, \$HistoryTypeID ],
-        #    Limit => 1,
-        #);
         
         # Here, the order by clausule standard from OTRS AG is ASC, so it brings the first close date.
         # COMPLEMENTO: As asked by some customers, we change it to DESC in order to bring the last closed time,
@@ -716,8 +680,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                 Ticket   => \%Ticket,
             );
 
-            #-------------------------------------------------------------------
-            # 
             my $EscalationDelayByFreeTimeRef =
                 $Kernel::OM->Get('Kernel::Config')->Get('Ticket::EscalationDelayed::FreeTimeField');
 
@@ -755,9 +717,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 
             }
 
-            # 
-            #-------------------------------------------------------------------
-
             # update solution time to 0
             if (%SolutionDone) {
                 $Kernel::OM->Get('Kernel::System::DB')->Do(
@@ -792,16 +751,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 	                    Calendar => $Escalation{Calendar},
 	                );
                 }
-
-                # 
-                # moved s.o. for use of PendingSumTime with Calendar/WorkingTime
-                # if ( $StatePend && $PendSumTime ) {
-                #   $DestinationTime = $PendSumTime;
-                # }
-                # elsif ( !$StatePend && $PendSumTime ) {
-                #    $DestinationTime = $DestinationTime + $PendSumTime;
-                # }
-                # 
 
                 # update solution time to $DestinationTime
                 $Kernel::OM->Get('Kernel::System::DB')->Do(
@@ -848,6 +797,177 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         }
         return @TicketIDs;
     }
+
+
+	# Rewrite this function in order to return when it's a paused SLA status
+	sub Kernel::System::Ticket::TicketEscalationDateCalculation {
+		my ( $Self, %Param ) = @_;
+
+		# check needed stuff
+		for my $Needed (qw(Ticket UserID)) {
+			if ( !defined $Param{$Needed} ) {
+				$Kernel::OM->Get('Kernel::System::Log')->Log(
+					Priority => 'error',
+					Message  => "Need $Needed!"
+				);
+				return;
+			}
+		}
+
+		# get ticket attributes
+		my %Ticket = %{ $Param{Ticket} };
+
+		# do no escalations on (merge|close|remove) tickets
+		return if $Ticket{StateType} eq 'merged';
+		return if $Ticket{StateType} eq 'closed';
+		return if $Ticket{StateType} eq 'removed';
+		
+		# get escalation properties
+		my %Escalation = $Self->TicketEscalationPreferences(
+			Ticket => $Param{Ticket},
+			UserID => $Param{UserID} || 1,
+		);
+
+		# return if we do not have any escalation attributes
+		my %Map = (
+			EscalationResponseTime => 'FirstResponse',
+			EscalationUpdateTime   => 'Update',
+			EscalationSolutionTime => 'Solution',
+		);
+		my $EscalationAttribute;
+		KEY:
+		for my $Key ( sort keys %Map ) {
+			if ( $Escalation{ $Map{$Key} . 'Time' } ) {
+				$EscalationAttribute = 1;
+				last KEY;
+			}
+		}
+
+		return if !$EscalationAttribute;
+
+		# get time object
+		my $TimeObject = $Kernel::OM->Get('Kernel::System::Time');
+
+		# calculate escalation times based on escalation properties
+		my $Time = $TimeObject->SystemTime();
+		my %Data;
+
+		#####################################################################################################
+		# Return if paused SLA State
+		# get some config values if required...
+		if ( !$Param{RelevantStates} ) {
+			my $RelevantStateNamesArrRef =
+				$Kernel::OM->Get('Kernel::Config')->Get('Ticket::EscalationDisabled::RelevantStates');
+				
+			if ( ref($RelevantStateNamesArrRef) eq 'ARRAY' ) {
+				my $RelevantStateNamesArrStrg = join( ',', @{$RelevantStateNamesArrRef} );
+				my %StateListHash = $Kernel::OM->Get('Kernel::System::State')->StateList( UserID => 1 );
+				for my $CurrStateID ( keys(%StateListHash) ) {
+					if ( $RelevantStateNamesArrStrg =~ /(^|.*,)$StateListHash{$CurrStateID}(,.*|$)/ ) {
+						$Param{RelevantStates}->{$CurrStateID} = $StateListHash{$CurrStateID};
+					}
+				}
+			}
+		}
+		my %RelevantStates = ();
+		if ( ref( $Param{RelevantStates} ) eq 'HASH' ) {
+			%RelevantStates = %{ $Param{RelevantStates} };
+		}
+		#####################################################################################################
+		
+		
+		TIME:
+		for my $Key ( sort keys %Map ) {
+
+			next TIME if !$Ticket{$Key};
+
+			# if it's a paused SLA state and it's Solution Escalation key
+			if ($RelevantStates{ $Ticket{StateID} } && $Key =~ /Solution/ ){
+				$Data{ $Map{$Key} . 'TimeDestinationTime' } = $Ticket{$Key};
+				$Data{ $Map{$Key} . 'TimeDestinationDate' } = $TimeObject->SystemTime2TimeStamp(
+					SystemTime => $Ticket{$Key},
+					);
+				$Data{ $Map{$Key} . 'TimeWorkingTime' }     = 100000000000000;
+				$Data{ $Map{$Key} . 'Time' }                = 100000000000000;
+				next TIME;
+			}
+
+			# get time before or over escalation (escalation_destination_unixtime - now)
+			my $TimeTillEscalation = $Ticket{$Key} - $Time;
+
+			# ticket is not escalated till now ($TimeTillEscalation > 0)
+			my $WorkingTime = 0;
+			if ( $TimeTillEscalation > 0 ) {
+
+				$WorkingTime = $TimeObject->WorkingTime(
+					StartTime => $Time,
+					StopTime  => $Ticket{$Key},
+					Calendar  => $Escalation{Calendar},
+				);
+
+				# extract needed data
+				my $Notify = $Escalation{ $Map{$Key} . 'Notify' };
+				my $Time   = $Escalation{ $Map{$Key} . 'Time' };
+
+				# set notification if notify % is reached
+				if ( $Notify && $Time ) {
+
+					my $Reached = 100 - ( $WorkingTime / ( $Time * 60 / 100 ) );
+
+					if ( $Reached >= $Notify ) {
+						$Data{ $Map{$Key} . 'TimeNotification' } = 1;
+					}
+				}
+			}
+
+			# ticket is overtime ($TimeTillEscalation < 0)
+			else {
+				$WorkingTime = $TimeObject->WorkingTime(
+					StartTime => $Ticket{$Key},
+					StopTime  => $Time,
+					Calendar  => $Escalation{Calendar},
+				);
+				$WorkingTime = "-$WorkingTime";
+
+				# set escalation
+				$Data{ $Map{$Key} . 'TimeEscalation' } = 1;
+			}
+			my $DestinationDate = $TimeObject->SystemTime2TimeStamp(
+				SystemTime => $Ticket{$Key},
+			);
+			$Data{ $Map{$Key} . 'TimeDestinationTime' } = $Ticket{$Key};
+			$Data{ $Map{$Key} . 'TimeDestinationDate' } = $DestinationDate;
+			$Data{ $Map{$Key} . 'TimeWorkingTime' }     = $WorkingTime;
+			$Data{ $Map{$Key} . 'Time' }                = $TimeTillEscalation;
+
+			# set global escalation attributes (set the escalation which is the first in time)
+			if (
+				!$Data{EscalationDestinationTime}
+				|| $Data{EscalationDestinationTime} > $Ticket{$Key}
+				)
+			{
+				$Data{EscalationDestinationTime} = $Ticket{$Key};
+				$Data{EscalationDestinationDate} = $DestinationDate;
+				$Data{EscalationTimeWorkingTime} = $WorkingTime;
+				$Data{EscalationTime}            = $TimeTillEscalation;
+
+				# escalation time in readable way
+				$Data{EscalationDestinationIn} = '';
+				$WorkingTime = abs($WorkingTime);
+				if ( $WorkingTime >= 3600 ) {
+					$Data{EscalationDestinationIn} .= int( $WorkingTime / 3600 ) . 'h ';
+					$WorkingTime = $WorkingTime
+						- ( int( $WorkingTime / 3600 ) * 3600 );    # remove already shown hours
+				}
+				if ( $WorkingTime <= 3600 || int( $WorkingTime / 60 ) ) {
+					$Data{EscalationDestinationIn} .= int( $WorkingTime / 60 ) . 'm';
+				}
+			}
+		}
+
+		return %Data;
+	}
+
 
     # reset all warnings
 }
