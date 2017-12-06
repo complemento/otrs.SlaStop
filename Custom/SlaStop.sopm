@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <otrs_package version="1.1">
     <Name>SlaStop</Name>
-    <Version>5.0.8</Version>
+    <Version>6.0.0</Version>
     <Vendor>Complemento [Free]</Vendor>
     <URL>http://www.complemento.net.br</URL>
     <License>GNU GENERAL PUBLIC LICENSE Version 2, June 1991</License>
@@ -19,7 +19,7 @@
     <Description Lang="en">This package is a snip of KIX4OTRS Sla Disabling feature with some modifications.</Description>
     <Description Lang="pt">Este pacote é um recorte do módulo de paralização de SLA do Kix4OTRS com algumas modificações.</Description>
     <Description Lang="pt_BR">Este pacote é um recorte do módulo de paralização de SLA do Kix4OTRS com algumas modificações.</Description>
-    <Framework>5.0.x</Framework>
+    <Framework>6.0.x</Framework>
     <IntroInstall Lang="en" Title="Tutorial" Type="pre">Don't use this package without testing exautivily on a devel server.</IntroInstall>
     <IntroInstall Lang="pt" Title="Tutorial" Type="pre">Não utilize em produção antes de homologar.</IntroInstall>
     <IntroInstall Lang="pt_BR" Title="Tutorial" Type="pre">Não utilize em produção antes de homologar.</IntroInstall>
@@ -38,7 +38,7 @@
 
 
     <Filelist>
-        <File Location="Kernel/Config/Files/Complemento.Escalation.xml" Permission="644"></File>
+        <File Location="Kernel/Config/Files/XML/Complemento.Escalation.xml" Permission="644"></File>
         <File Location="Kernel/System/Ticket/TicketExtensionsStopEscalation.pm" Permission="644"></File>
         <File Location="var/httpd/htdocs/js/Complemento.TicketEscalation.js" Permission="644"></File>
         <File Location="Custom/SlaStop.sopm" Permission="644"></File>
