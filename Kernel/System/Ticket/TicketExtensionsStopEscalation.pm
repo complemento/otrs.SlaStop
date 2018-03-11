@@ -180,10 +180,10 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         my $SQL =
             'SELECT a.create_time, a.id FROM article a, article_sender_type ast'
             . ' WHERE a.article_sender_type_id = ast.id 
-                AND a.is_visible_for_customer = ?
+  			    AND a.ticket_id = ?           
 			    AND ast.name = ? 
-				AND'
-            . ' a.ticket_id = ? AND ( ';
+				AND a.is_visible_for_customer = ?
+				AND ( ';
 
         my $SQL1 =
             '( ast.name = \'agent\' '
@@ -260,7 +260,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             StopTime  => $FirstResponseTime,
             Calendar  => $Escalation{Calendar},
         );
-
         $Data{FirstResponseInMin} = int( $WorkingTime / 60 );
 
         if ( $Escalation{FirstResponseTime} ) {
@@ -572,7 +571,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             # check if update escalation should be set
             my @SenderHistory;
             return if !$Kernel::OM->Get('Kernel::System::DB')->Prepare(
-                SQL => 'SELECT article_sender_type_id, article_sender_type_id, create_time FROM '
+                SQL => 'SELECT  article_sender_type_id, create_time FROM '
                     . 'article WHERE ticket_id = ? ORDER BY create_time ASC',
                 Bind => [ \$Param{TicketID} ],
             );
