@@ -178,14 +178,15 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 
         # 
         my $SQL =
-            'SELECT a.create_time, a.id FROM article a, article_sender_type ast, article_type art'
-            . ' WHERE a.article_sender_type_id = ast.id AND a.article_type_id = art.id AND'
+            'SELECT a.create_time, a.id FROM article a, article_sender_type ast'
+            . ' WHERE a.article_sender_type_id = ast.id 
+                AND a.is_visible_for_customer = ?
+			    AND ast.name = ? 
+				AND'
             . ' a.ticket_id = ? AND ( ';
 
         my $SQL1 =
-            '( ast.name = \'agent\' AND'
-            . ' (art.name LIKE \'email-ext%\' OR art.name LIKE \'note-ext%\' '
-            . ' OR art.name = \'phone\' OR art.name = \'fax\' OR art.name = \'sms\')'
+            '( ast.name = \'agent\' '
             . ')';
 
         my $SQL2 = ') ORDER BY a.create_time';
@@ -571,7 +572,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             # check if update escalation should be set
             my @SenderHistory;
             return if !$Kernel::OM->Get('Kernel::System::DB')->Prepare(
-                SQL => 'SELECT article_sender_type_id, article_type_id, create_time FROM '
+                SQL => 'SELECT article_sender_type_id, article_sender_type_id, create_time FROM '
                     . 'article WHERE ticket_id = ? ORDER BY create_time ASC',
                 Bind => [ \$Param{TicketID} ],
             );
@@ -582,19 +583,20 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                     Created       => $Row[2],
                 };
             }
-
+	
+			my $ArticleObject = $Kernel::OM->Get("Kernel::System::Ticket::Article");	
             # fill up lookups
             for my $Row (@SenderHistory) {
 
                 # get sender type
-                $Row->{SenderType} = $Self->ArticleSenderTypeLookup(
+                $Row->{SenderType} = $ArticleObject->ArticleSenderTypeLookup(
                     SenderTypeID => $Row->{SenderTypeID},
                 );
 
                 # get article type
-                $Row->{ArticleType} = $Self->ArticleTypeLookup(
-                    ArticleTypeID => $Row->{ArticleTypeID},
-                );
+       #         $Row->{ArticleType} = $Self->ArticleTypeLookup(
+        #            ArticleTypeID => $Row->{ArticleTypeID},
+         #       );
             }
 
             # get latest customer contact time
@@ -611,7 +613,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                 #last if $Ticket{Lock} eq 'lock';
 
                 # do not use /int/ article types for calculation
-                next if $Row->{ArticleType} =~ /int/i;
+          #      next if $Row->{ArticleType} =~ /int/i;
 
                 # only use 'agent' and 'customer' sender types for calculation
                 next if $Row->{SenderType} !~ /^(agent|customer)$/;
