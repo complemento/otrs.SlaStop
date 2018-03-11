@@ -202,7 +202,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             )
             )
         {
-            $SQL1 .= ' OR ( ast.name = \'customer\' AND art.name = \'phone\')';
+            $SQL1 .= ' OR ( ast.name = \'customer\' )';
         }
 
         my $RespTimeByAutoReply = $Kernel::OM->Get('Kernel::Config')->Get('Ticket::ResponsetimeSetByAutoReply');
@@ -216,7 +216,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             )
             )
         {
-            $SQL1 .= ' OR ( ast.name = \'system\' AND art.name LIKE \'email%-ext%\')';
+            $SQL1 .= ' OR ( ast.name = \'system\' )';
         }
 
         $SQL .= $SQL1 . $SQL2;
@@ -226,7 +226,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         # check if first response is already done
         return if !$Kernel::OM->Get('Kernel::System::DB')->Prepare(
             SQL => $SQL,
-            Bind  => [ \$Param{TicketID} ],
+            Bind  => [ \$Param{TicketID}, \'agent', \1 ],
             Limit => 1,
         );
         my %Data;
