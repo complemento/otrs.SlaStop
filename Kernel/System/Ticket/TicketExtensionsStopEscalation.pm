@@ -179,15 +179,12 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         # 
         my $SQL =
             'SELECT a.create_time, a.id FROM article a, article_sender_type ast'
-            . ' WHERE a.article_sender_type_id = ast.id 
-  			    AND a.ticket_id = ?           
-			    AND ast.name = ? 
-				AND a.is_visible_for_customer = ?
-				AND ( ';
+            . ' WHERE a.article_sender_type_id = ast.id  AND'
+            . ' a.ticket_id = ? 
+                AND a.is_visible_for_customer = ? AND ( ';
 
         my $SQL1 =
-            '( ast.name = \'agent\' '
-            . ')';
+            '( ast.name = \'agent\')';
 
         my $SQL2 = ') ORDER BY a.create_time';
 
@@ -202,7 +199,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             )
             )
         {
-            $SQL1 .= ' OR ( ast.name = \'customer\' )';
+            $SQL1 .= ' OR ( ast.name = \'customer\' AND art.name = \'phone\')';
         }
 
         my $RespTimeByAutoReply = $Kernel::OM->Get('Kernel::Config')->Get('Ticket::ResponsetimeSetByAutoReply');
@@ -216,16 +213,17 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             )
             )
         {
-            $SQL1 .= ' OR ( ast.name = \'system\' )';
+            $SQL1 .= ' OR ( ast.name = \'system\' AND art.name LIKE \'email%-ext%\')';
         }
 
         $SQL .= $SQL1 . $SQL2;
 
         # 
+
         # check if first response is already done
         return if !$Kernel::OM->Get('Kernel::System::DB')->Prepare(
             SQL => $SQL,
-            Bind  => [ \$Param{TicketID}, \'agent', \1 ],
+            Bind  => [ \$Param{TicketID}, \1 ],
             Limit => 1,
         );
         my %Data;
@@ -245,33 +243,23 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             UserID => $Param{UserID} || 1,
         );
 
-
         # get unix time stamps
-		 my $DateTimeObject = $Kernel::OM->Create(
-            'Kernel::System::DateTime',
-            ObjectParams => {
-                String => $Param{Ticket}->{Created},
-                }
+        my $CreateTime = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+            String => $Param{Ticket}->{Created},
+        );
+        my $FirstResponseTime = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+            String => $Data{FirstResponse},
         );
 
-        my $FirstResponseTimeObj = $DateTimeObject->Clone();
-        $FirstResponseTimeObj->Set(
-            String => $Data{FirstResponse}
+        # get time between creation and first response
+        my $WorkingTime = $Kernel::OM->Get('Kernel::System::Time')->WorkingTime(
+            StartTime => $CreateTime,
+            StopTime  => $FirstResponseTime,
+            Calendar  => $Escalation{Calendar},
         );
 
-		my $DeltaObj = $DateTimeObject->Delta(
-            DateTimeObject => $FirstResponseTimeObj,
-            ForWorkingTime => 1,
-            Calendar       => $Escalation{Calendar},
-        );
-
-		
-		$Kernel::OM->Get("Kernel::System::Log")->Dumper($FirstResponseTimeObj);	
-		$Kernel::OM->Get("Kernel::System::Log")->Dumper($Param{Ticket});	
-        my $WorkingTime = $DeltaObj ? $DeltaObj->{AbsoluteSeconds} : 0;
         $Data{FirstResponseInMin} = int( $WorkingTime / 60 );
 
-		$Kernel::OM->Get("Kernel::System::Log")->Dumper($WorkingTime);	
         if ( $Escalation{FirstResponseTime} ) {
 
             # 
@@ -356,48 +344,21 @@ sub GetTotalNonEscalationRelevantBusinessTime {
         );
 
         # get unix time stamps
-#        my $CreateTime = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
-#            String => $Param{Ticket}->{Created},
-#        );
-#
-#        my $SolutionTime = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
-#            String => $Data{Closed},
-#        );
-#
-#        # get time between creation and solution
-#        my $WorkingTime = $Kernel::OM->Get('Kernel::System::Time')->WorkingTime(
-#            StartTime => $CreateTime,
-#            StopTime  => $SolutionTime,
-#            Calendar  => $Escalation{Calendar},
-#        );
-#
-#        $Data{SolutionInMin} = int( $WorkingTime / 60 );
+        my $CreateTime = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+            String => $Param{Ticket}->{Created},
+        );
+        my $SolutionTime = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+            String => $Data{Closed},
+        );
 
-		 # create datetime object
-		my $DateTimeObject = $Kernel::OM->Create(
-		    'Kernel::System::DateTime',
-		    ObjectParams => {
-		        String => $Param{Ticket}->{Created},
-		        }
-		);
-		
-		my $SolutionTimeObj = $Kernel::OM->Create(
-		    'Kernel::System::DateTime',
-		    ObjectParams => {
-		        String => $Data{Closed},
-		        }
-		);
-		
-		my $DeltaObj = $DateTimeObject->Delta(
-		    DateTimeObject => $SolutionTimeObj,
-		    ForWorkingTime => 1,
-		    Calendar       => $Escalation{Calendar},
-		);
-		
-		my $WorkingTime = $DeltaObj ? $DeltaObj->{AbsoluteSeconds} : 0;
-		
-		$Data{SolutionInMin} = int( $WorkingTime / 60 );
+        # get time between creation and solution
+        my $WorkingTime = $Kernel::OM->Get('Kernel::System::Time')->WorkingTime(
+            StartTime => $CreateTime,
+            StopTime  => $SolutionTime,
+            Calendar  => $Escalation{Calendar},
+        );
 
+        $Data{SolutionInMin} = int( $WorkingTime / 60 );
 
         # COMPLEMENTO - ADICIONA AS HORAS QUE NÃO CONTA SLA NO CALCULO
         my $NaoContaSLA = $Self->GetTotalNonEscalationRelevantBusinessTime(
@@ -577,28 +538,13 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 
             # update first response time to expected escalation destination time
             else {
-#                my $DestinationTime = $Kernel::OM->Get('Kernel::System::Time')->DestinationTime(
-#                    StartTime => $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
-#                        String => $Ticket{Created}
-#                    ),
-#                    Time     => $Escalation{FirstResponseTime} * 60,
-#                    Calendar => $Escalation{Calendar},
-#                );
-#
-				 my $DateTimeObject = $Kernel::OM->Create(
-                	'Kernel::System::DateTime',
-               		 ObjectParams => {
-                   		 String => $Ticket{Created},
-                     }
-            	);
-
-            	$DateTimeObject->Add(
-                	AsWorkingTime => 1,
-               		 Calendar      => $Escalation{Calendar},
-                	Seconds       => $Escalation{FirstResponseTime} * 60,
-            	);
-
-           		my $DestinationTime = $DateTimeObject->ToEpoch();
+                my $DestinationTime = $Kernel::OM->Get('Kernel::System::Time')->DestinationTime(
+                    StartTime => $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+                        String => $Ticket{Created}
+                    ),
+                    Time     => $Escalation{FirstResponseTime} * 60,
+                    Calendar => $Escalation{Calendar},
+                );
 
                 # update first response time to $DestinationTime
                 $Kernel::OM->Get('Kernel::System::DB')->Do(
@@ -623,7 +569,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
             # check if update escalation should be set
             my @SenderHistory;
             return if !$Kernel::OM->Get('Kernel::System::DB')->Prepare(
-                SQL => 'SELECT  article_sender_type_id, create_time FROM '
+                SQL => 'SELECT article_sender_type_id, create_time FROM '
                     . 'article WHERE ticket_id = ? ORDER BY create_time ASC',
                 Bind => [ \$Param{TicketID} ],
             );
@@ -634,20 +580,13 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                     Created       => $Row[2],
                 };
             }
-	
-			my $ArticleObject = $Kernel::OM->Get("Kernel::System::Ticket::Article");	
+
             # fill up lookups
             for my $Row (@SenderHistory) {
 
                 # get sender type
-                $Row->{SenderType} = $ArticleObject->ArticleSenderTypeLookup(
-                    SenderTypeID => $Row->{SenderTypeID},
-                );
 
                 # get article type
-       #         $Row->{ArticleType} = $Self->ArticleTypeLookup(
-        #            ArticleTypeID => $Row->{ArticleTypeID},
-         #       );
             }
 
             # get latest customer contact time
@@ -663,11 +602,10 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                 # do not use locked tickets for calculation
                 #last if $Ticket{Lock} eq 'lock';
 
+            	next if !$Row->{IsVisibleForCustomer};
                 # do not use /int/ article types for calculation
-          #      next if $Row->{ArticleType} =~ /int/i;
 
                 # only use 'agent' and 'customer' sender types for calculation
-                next if $Row->{SenderType} !~ /^(agent|customer)$/;
 
                 # last if latest was customer and the next was not customer
                 # otherwise use also next, older customer article as latest
@@ -689,31 +627,13 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                 }
             }
             if ($LastSenderTime) {
-#                my $DestinationTime = $Kernel::OM->Get('Kernel::System::Time')->DestinationTime(
-#                    StartTime => $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
-#                        String => $LastSenderTime,
-#                    ),
-#                    Time     => $Escalation{UpdateTime} * 60,
-#                    Calendar => $Escalation{Calendar},
-#                );
-#
-#
-
-				  my $DateTimeObject = $Kernel::OM->Create(
-                	'Kernel::System::DateTime',
-               		 ObjectParams => {
-                	    String => $LastSenderTime,
-                     }
-           		  );
-
-		         $DateTimeObject->Add(
-		                Seconds       => $Escalation{UpdateTime} * 60,
-		                AsWorkingTime => 1,
-		                Calendar      => $Escalation{Calendar},
-	            );
-
-		        my $DestinationTime = $DateTimeObject->ToEpoch();
-
+                my $DestinationTime = $Kernel::OM->Get('Kernel::System::Time')->DestinationTime(
+                    StartTime => $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+                        String => $LastSenderTime,
+                    ),
+                    Time     => $Escalation{UpdateTime} * 60,
+                    Calendar => $Escalation{Calendar},
+                );
 
                 # update update time to $DestinationTime
                 $Kernel::OM->Get('Kernel::System::DB')->Do(
@@ -768,16 +688,10 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                 my $CreateTimeStamp = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
                     String => $Ticket{Created},
                 );
-				my $DateTimeStampObject = $Kernel::OM->Create(
-		    'Kernel::System::DateTime',
-		    ObjectParams => {
-		        String => $Ticket{Created},
-		        }
-		);
-		my $DateTimeObjectTicketFreeTimeStamp = $Kernel::OM->Create(
-		    'Kernel::System::DateTime',
-		    ObjectParams => {
-		        String => $Ticket{ 'TicketFreeTime' . $EscalationDelayByFreeTimeRef->{Index}} || '2000-01-01 00:00:00' });
+                my $TicketFreeTimeStamp = $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+                    String => $Ticket{ 'TicketFreeTime' . $EscalationDelayByFreeTimeRef->{Index} }
+                        || '2000-01-01 00:00:00',
+                );
 
                 if (
                     (
@@ -785,7 +699,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                         && $TicketFTimeKey =~ /$EscalationDelayByFreeTimeRef->{KeyRegExp}/
                         && $Ticket{ 'TicketFreeTime' . $EscalationDelayByFreeTimeRef->{Index} }
                     )
-                    && ( $DateTimeStampObject->toString() < $DateTimeObjectTicketFreeTimeStamp->toString() )
+                    && ( $CreateTimeStamp < $TicketFreeTimeStamp )
                     )
                 {
                     $Ticket{SLAStartTime} =
@@ -810,32 +724,36 @@ sub GetTotalNonEscalationRelevantBusinessTime {
                 }
                 else {
                 # 
-					 my $DateTimeObject = $Kernel::OM->Create(
-          		      'Kernel::System::DateTime',
-               		   ObjectParams => {
-                       		String => $Ticket{SLAStartTime} || $Ticket{Created},
-                       }
-            		);
 
-         		   $DateTimeObject->Add(
-            	     Seconds       => $Escalation{SolutionTime} * 60 + $PendSumTime,
-               		 AsWorkingTime => 1,
-               	   	 Calendar      => $Escalation{Calendar},
-            		);
+	                $DestinationTime = $Kernel::OM->Get('Kernel::System::Time')->DestinationTime(
+	                    StartTime => $Kernel::OM->Get('Kernel::System::Time')->TimeStamp2SystemTime(
+	
+	                        # 
+	                        # String => $Ticket{Created}
+	                        String => $Ticket{SLAStartTime} || $Ticket{Created},
+	
+	                        # 
+	
+	                    ),
+                        # 
+                        # Time     => $Escalation{SolutionTime} * 60,
+	                    Time     => $Escalation{SolutionTime} * 60 + $PendSumTime,
+                        # 
+	                    Calendar => $Escalation{Calendar},
+	                );
+                }
 
-            	    my $DestinationTime = $DateTimeObject->ToEpoch();
-				}	
-        	    # update solution time to $DestinationTime
+                # update solution time to $DestinationTime
                 $Kernel::OM->Get('Kernel::System::DB')->Do(
-               		SQL => 'UPDATE ticket SET escalation_solution_time = ? WHERE id = ?',
+                    SQL => 'UPDATE ticket SET escalation_solution_time = ? WHERE id = ?',
                     Bind => [ \$DestinationTime, \$Ticket{TicketID}, ]
                 );
 
-              	# remember escalation time
-               	if ( $EscalationTime == 0 || $DestinationTime < $EscalationTime ) {
-                	$EscalationTime = $DestinationTime;
-               	}
-           	}
+                # remember escalation time
+                if ( $EscalationTime == 0 || $DestinationTime < $EscalationTime ) {
+                    $EscalationTime = $DestinationTime;
+                }
+            }
         }
 
         # update escalation time (< escalation time)
@@ -921,7 +839,6 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 		# get time object
 		my $TimeObject = $Kernel::OM->Get('Kernel::System::Time');
 
-    	my $DateTimeObject = $Kernel::OM->Create('Kernel::System::DateTime');
 		# calculate escalation times based on escalation properties
 		my $Time = $TimeObject->SystemTime();
 		my %Data;
@@ -973,25 +890,11 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 			my $WorkingTime = 0;
 			if ( $TimeTillEscalation > 0 ) {
 
-		#		$WorkingTime = $TimeObject->WorkingTime(
-		#			StartTime => $Time,
-		#			StopTime  => $Ticket{$Key},
-		#			Calendar  => $Escalation{Calendar},
-		#		);
-				my $StopTimeObj = $Kernel::OM->Create(
-                	'Kernel::System::DateTime',
-                	ObjectParams => {
-                   		Epoch => $Ticket{$Key}
-                    }
-            	);
-
-        	    my $DeltaObj = $DateTimeObject->Delta(
-            	    DateTimeObject => $StopTimeObj,
-               		ForWorkingTime => 1,
-               		Calendar       => $Escalation{Calendar},
-            	);
-
-            	$WorkingTime = $DeltaObj ? $DeltaObj->{AbsoluteSeconds} : 0;
+				$WorkingTime = $TimeObject->WorkingTime(
+					StartTime => $Time,
+					StopTime  => $Ticket{$Key},
+					Calendar  => $Escalation{Calendar},
+				);
 
 				# extract needed data
 				my $Notify = $Escalation{ $Map{$Key} . 'Notify' };
@@ -1020,15 +923,11 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 				# set escalation
 				$Data{ $Map{$Key} . 'TimeEscalation' } = 1;
 			}
-			my $DestinationDate = $Kernel::OM->Create(
-            	'Kernel::System::DateTime',
-           		 ObjectParams => {
-                	Epoch => $Ticket{$Key}
-                 }
-        	);
-
+			my $DestinationDate = $TimeObject->SystemTime2TimeStamp(
+				SystemTime => $Ticket{$Key},
+			);
 			$Data{ $Map{$Key} . 'TimeDestinationTime' } = $Ticket{$Key};
-			$Data{ $Map{$Key} . 'TimeDestinationDate' } = $DestinationDate->ToString();
+			$Data{ $Map{$Key} . 'TimeDestinationDate' } = $DestinationDate;
 			$Data{ $Map{$Key} . 'TimeWorkingTime' }     = $WorkingTime;
 			$Data{ $Map{$Key} . 'Time' }                = $TimeTillEscalation;
 
@@ -1039,7 +938,7 @@ sub GetTotalNonEscalationRelevantBusinessTime {
 				)
 			{
 				$Data{EscalationDestinationTime} = $Ticket{$Key};
-				$Data{EscalationDestinationDate} = $DestinationDate->ToString();
+				$Data{EscalationDestinationDate} = $DestinationDate;
 				$Data{EscalationTimeWorkingTime} = $WorkingTime;
 				$Data{EscalationTime}            = $TimeTillEscalation;
 
