@@ -2,7 +2,7 @@
 <otrs_package version="1.1">
     <Name>SlaStop</Name>
     <Version>6.0.0</Version>
-    <Vendor>Complemento [Free]</Vendor>
+    <Vendor>Ligero [Community]</Vendor>
     <URL>http://www.complemento.net.br</URL>
     <License>GNU GENERAL PUBLIC LICENSE Version 2, June 1991</License>
     <ChangeLog Date="2017-09-27 11:22:12" Version="5.0.8">AddOn fixed to work with the Customer Interface.</ChangeLog>
